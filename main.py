@@ -9,9 +9,7 @@ timeData = {'On':config.TIMEON, 'Off':config.TIMEOFF,
 newCom = {'borders':[50,100,150], 'level':0, 'state':'blue'}
 
 def parse_command(command):
-
-    for t in command:
-        newCom[t] = command[t]
+    newCom.update({k:v for k,v in command.items() if v != newCom.get(k, v)})
     print(newCom)
     if newCom['level'] < newCom['borders'][0]:
         timeData['numLEDs'] = int(newCom['level']/newCom['borders'][0]*16)
@@ -117,5 +115,6 @@ def main():
 
 
 main()
+
 
 
