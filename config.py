@@ -7,20 +7,20 @@ ENV = 'dev'
 
 LINELEN = 16
 LINEPIN = 12
+
 FLAGS = ['On', 'Off']
 
 cfg = {
-    'broker_ip': '192.168.0.200',
     'client_id': hexlify(machine.unique_id()),
     'mac': hexlify(WLAN().config('mac')),
     'last_message': 0,
     'message_interval': 5,
     'counter': 0,
-    'wlan_ssid': 'P2797-24',  
+    'wlan_ssid': 'ArmyDep',  
     'wlan_password': 'z0BcfpHu'
 }
 
-scale = neopixel(machine.Pin(LINEPIN), LINELEN)
+scale = neopixel.NeoPixel(machine.Pin(LINEPIN), LINELEN)
 
 topics = {
     'sub': b'SCALE',
@@ -34,4 +34,5 @@ HALFB = 32
 
 TIMEON = 250
 TIMEOFF = 250
+
 
