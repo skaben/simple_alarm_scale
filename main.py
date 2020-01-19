@@ -2,14 +2,19 @@ import  time, math, ujson, network
 import umqttsimple 
 import config 
 
-timeData = {'On':config.TIMEON, 'Off':config.TIMEOFF,
+station = network.WLAN(network.STA_IF)
+
+timeData = {'On':config.TIMEON, 'Off':config.TIMEOFF, 'flagon':0,
             'Flag':'On', 'color':{'On':[0,0,0], 'Off':[0,0,0]},
             'numLEDs':0, 'Prev':0, 'Current':0}
 
 newCom = {'borders':[50,100,150], 'level':0, 'state':'blue'}
 
+
+
 def parse_command(command):
-    newCom.update({k:v for k,v in command.items() if v != newCom.get(k, v)})
+    for t in command:
+        newCom[t] = command[t]
     print(newCom)
     if newCom['level'] < newCom['borders'][0]:
         timeData['numLEDs'] = int(newCom['level']/newCom['borders'][0]*16)
@@ -42,40 +47,74 @@ def mqtt_callback(topic, msg):
         except:
             time.sleep(.2)
             return
-    
+
 def connect_and_subscribe():
-    server = config.cfg.get('broker_ip')
-    client = umqttsimple.MQTTClient(config.cfg.get('client_id'), server)
+    bList = str(station.ifconfig()[0]).split('.')
+    bList[-1] = '254'
+    brokerIP = '.'.join(bList)
+    print("MQTT broker address: " + brokerIP)
+    client = umqttsimple.MQTTClient(config.cfg.get('client_id'), brokerIP)
     client.set_callback(mqtt_callback)
-    client.connect()
+    try:
+        client.connect()
+    except:
+        timeData['mqtt_conn'] = False
+        return client
     sub_topics = [config.topics[t] for t in config.topics if 'sub' in t]
     for t in sub_topics:
         client.subscribe(t)
-    print('connected to {}, subscribed to {}'.format(server, sub_topics))
+    print('connected to {}, subscribed to {}'.format(brokerIP, sub_topics))
+    cmd_out = 'CUP/{"lts":"'+str(time.ticks_ms())+'"}'
     for i in range (config.LINELEN):
         config.scale[i] = (0,0,0)
     config.scale.write()
-    cmd_out = 'CUP/{"lts":"'+str(time.ticks_ms())+'"}'
-    client.publish(config.topics['pub_id'], cmd_out)
+    try:
+        client.publish(config.topics['pub_id'], cmd_out)
+        timeData['mqtt_conn'] = True
+    except:
+        timeData['mqtt_conn'] = False
+        restart_and_reconnect()
     return client
 
 def restart_and_reconnect():
     print('Failed to connect to MQTT broker. Reconnecting...')
-    for x in range(10):
+    if station.isconnected() == False:
+        print('WiFi connection lost!')
+        wifi_init()
+    for x in range(5):
         config.scale[0]=(0,255,0)
         config.scale.write()
         time.sleep_ms(250)
         config.scale[0]=(0,0,0)
         config.scale.write()
         time.sleep_ms(250)
-    machine.reset()
-    
+
 def wifi_init():
-    station = network.WLAN(network.STA_IF)
     station.active(True)
     station.connect(config.cfg['wlan_ssid'], config.cfg['wlan_password'])
     while station.isconnected() == False:
-        for x in range (4):
+        for x in range (5):
+            config.scale[0]=(255,0,0)
+            config.scale.write()
+            time.sleep_ms(250)
+            config.scale[0]=(0,0,0)
+            config.scale.write()
+            time.sleep_ms(250)
+    print('Connection successful')
+    print(station.ifconfig())
+
+def mqtt_init():
+    timeData['mqtt_conn'] = False
+    while timeData['mqtt_conn'] == False:
+        restart_and_reconnect()
+        client = connect_and_subscribe()
+    return client
+
+def wifi_init():
+    station.active(True)
+    station.connect(config.cfg['wlan_ssid'], config.cfg['wlan_password'])
+    while station.isconnected() == False:
+        for x in range (5):
             config.scale[0]=(255,0,0)
             config.scale.write()
             time.sleep_ms(250)
@@ -86,35 +125,24 @@ def wifi_init():
     print(station.ifconfig())
 
 def main():
-    try:
-        wifi_init()
-    except OSError as e:
-        print(e)
-        restart_and_reconnect()
-    try:
-        client = connect_and_subscribe()
-    except OSError as e:
-        print(e)
-        restart_and_reconnect()
-    flag_on = 0    
+    wifi_init()
+    client = mqtt_init()    
     while True:
         timeData['Current'] = time.ticks_ms()
         try:
             client.check_msg()
             if (timeData['Current'] - timeData['Prev']) >= timeData[timeData['Flag']]:
                 timeData['Prev'] = timeData['Current']
-                flag_on = (flag_on + 1) % 2
-                timeData['Flag'] = config.FLAGS[flag_on]
+                timeData['flagon'] = (timeData['flagon'] + 1) % 2
+                timeData['Flag'] = config.FLAGS[timeData['flagon']]
                 for i in range(timeData['numLEDs']):
                     config.scale[i] = timeData['color'][timeData['Flag']]
                 for i in range(timeData['numLEDs'], config.LINELEN):
                     config.scale[i] = (0,0,0)
                 config.scale.write()
         except OSError as e:
-            machine.reset()
-
+            client = mqtt_init()    
 
 main()
-
 
 
