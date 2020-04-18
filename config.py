@@ -23,10 +23,10 @@ cfg = {
 scale = neopixel.NeoPixel(machine.Pin(LINEPIN), LINELEN)
 
 topics = {
-    'sub': b'SCALE',
-    'pub': b'SCALEASK',
-    'pub_id': b'SCALEASK/' + cfg['mac'],
-    'sub_id': b'SCALE/' + cfg['mac']
+    'sub': b'scale',
+    'pub': b'ask/scale',
+    'pub_id': b'ask/scale/' + cfg['mac'],
+    'sub_id': b'scale/' + cfg['mac']
 }
 
 FULLB = 32

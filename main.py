@@ -4,18 +4,24 @@ import config
 
 station = network.WLAN(network.STA_IF)
 
-timeData = {'On':config.TIMEON, 'Off':config.TIMEOFF, 'flagon':0,
-            'Flag':'On', 'color':{'On':[0,0,0], 'Off':[0,0,0]},
-            'numLEDs':0, 'Prev':0, 'Current':0}
+timeData = {'On':config.TIMEON,
+            'Off':config.TIMEOFF,
+            'flagon':0,
+            'Flag':'On',
+            'color':{'On':[0,0,0],
+            'Off':[0,0,0]},
+            'numLEDs':0,
+            'Prev':0,
+            'Current':0}
 
 newCom = {'borders':[50,100,150], 'level':0, 'state':'blue'}
-
 
 
 def parse_command(command):
     for t in command:
         newCom[t] = command[t]
     print(newCom)
+
     if newCom['level'] < newCom['borders'][0]:
         timeData['numLEDs'] = int(newCom['level']/newCom['borders'][0]*16)
         timeData['color']['On'] = (0,config.FULLB,0)
@@ -37,7 +43,8 @@ def parse_command(command):
         timeData['color']['Off'] = (0,config.HALFB,config.HALFB)
     else:
         timeData['color']['Off'] = timeData['color']['On']
-  
+
+
 def mqtt_callback(topic, msg):
     if topic in (config.topics['sub'], config.topics['sub_id']):
         print(msg)
@@ -47,6 +54,7 @@ def mqtt_callback(topic, msg):
         except:
             time.sleep(.2)
             return
+
 
 def connect_and_subscribe():
     bList = str(station.ifconfig()[0]).split('.')
@@ -58,27 +66,30 @@ def connect_and_subscribe():
     try:
         client.connect()
     except:
-        timeData['mqtt_conn'] = False
+        timeData['mqtt_conn'] = None
         return client
     sub_topics = [config.topics[t] for t in config.topics if 'sub' in t]
     for t in sub_topics:
         client.subscribe(t)
     print('connected to {}, subscribed to {}'.format(brokerIP, sub_topics))
-    cmd_out = 'CUP/{"lts":"'+str(time.ticks_ms())+'"}'
+    cmd_out = '{"lts":"'+str(time.ticks_ms())+'"}'
     for i in range (config.LINELEN):
         config.scale[i] = (0,0,0)
     config.scale.write()
     try:
-        client.publish(config.topics['pub_id'], cmd_out)
+        # send info to server ('SUP' topic)
+        client.publish(config.topics['pub_id'] + '/SUP', cmd_out)
         timeData['mqtt_conn'] = True
     except:
-        timeData['mqtt_conn'] = False
+        timeData['mqtt_conn'] = None
         restart_and_reconnect()
     return client
 
+
 def restart_and_reconnect():
     print('Failed to connect to MQTT broker. Reconnecting...')
-    if station.isconnected() == False:
+
+    if not station.isconnected():
         print('WiFi connection lost!')
         wifi_init()
     for x in range(5):
@@ -89,31 +100,23 @@ def restart_and_reconnect():
         config.scale.write()
         time.sleep_ms(250)
 
-def wifi_init():
-    station.active(True)
-    station.connect(config.cfg['wlan_ssid'], config.cfg['wlan_password'])
-    while station.isconnected() == False:
-        for x in range (5):
-            config.scale[0]=(255,0,0)
-            config.scale.write()
-            time.sleep_ms(250)
-            config.scale[0]=(0,0,0)
-            config.scale.write()
-            time.sleep_ms(250)
-    print('Connection successful')
-    print(station.ifconfig())
 
 def mqtt_init():
-    timeData['mqtt_conn'] = False
-    while timeData['mqtt_conn'] == False:
+    timeData['mqtt_conn'] = None
+    client = None
+
+    while not timeData['mqtt_conn']:
         restart_and_reconnect()
         client = connect_and_subscribe()
+
     return client
+
 
 def wifi_init():
     station.active(True)
     station.connect(config.cfg['wlan_ssid'], config.cfg['wlan_password'])
-    while station.isconnected() == False:
+
+    while not station.isconnected():
         for x in range (5):
             config.scale[0]=(255,0,0)
             config.scale.write()
@@ -123,10 +126,12 @@ def wifi_init():
             time.sleep_ms(250)
     print('Connection successful')
     print(station.ifconfig())
+
 
 def main():
     wifi_init()
-    client = mqtt_init()    
+    client = mqtt_init()
+
     while True:
         timeData['Current'] = time.ticks_ms()
         try:
@@ -144,5 +149,3 @@ def main():
             client = mqtt_init()    
 
 main()
-
-
